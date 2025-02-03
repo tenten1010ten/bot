@@ -1,10 +1,11 @@
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
 
-const token = '7983929468:AAFztqDgG9ABDBBaM7b0e59m7NMDu4axwMk'; // Обновленный токен
+const token = '7598049091:AAGxc5riFKv2LxwrbYYc2oA_-DB75sBEg8Q'; // Обновленный токен
 const bot = new TelegramBot(token, { polling: true });
 
-const CHANNELS = ['TESTONEDAS', 'TESTBOSSSA']; // Два канала для подписки
-const REWARD_BOT = 'https://t.me/STRANGETGJ_BOT?start=Premmbo';
+const REWARD_BOT = 'https://t.me/Stand2gold_special_for_all_bot?start=Welcome';
+const statsFile = 'stats.txt'; // Файл для хранения количества пользователей
 
 const userData = new Map();
 const userTimers = {}; // Таймеры пользователей
@@ -16,7 +17,7 @@ bot.setMyCommands([
 
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
-    userData.set(chatId, { subscribed: false, received: false });
+    userData.set(chatId, { received: false });
     await sendInitialMessage(chatId);
     scheduleReminders(chatId);
 });
@@ -24,45 +25,12 @@ bot.onText(/\/start/, async (msg) => {
 async function sendInitialMessage(chatId) {
     const inlineKeyboard = {
         inline_keyboard: [
-            [
-                {
-                    text: '✔️ Подписаться на канал 1',
-                    url: `https://t.me/${CHANNELS[0]}`,
-                },
-            ],
-            [
-                {
-                    text: '✔️ Подписаться на канал 2',
-                    url: `https://t.me/${CHANNELS[1]}`,
-                },
-            ],
-            [
-                {
-                    text: '🔄 Проверить подписку',
-                    callback_data: `check_sub_${chatId}`,
-                },
-            ],
-            [
-                {
-                    text: '📩 Получить',
-                    callback_data: `get_reward_${chatId}`,
-                    disabled: true,
-                },
-            ],
-            [
-                {
-                    text: '✔️ Готово',
-                    callback_data: `done_${chatId}`,
-                    disabled: true,
-                },
-            ],
+            [{ text: '✔️ Получить', callback_data: `get_reward_${chatId}` }],
         ],
     };
-    await bot.sendMessage(
-        chatId,
-        '👇 забери подарочный сертификат вб на 10000 рублей ',
-        { reply_markup: inlineKeyboard }
-    );
+    await bot.sendMessage(chatId, '👇 Забери промокод тут ', {
+        reply_markup: inlineKeyboard,
+    });
 }
 
 function scheduleReminders(chatId) {
@@ -74,6 +42,7 @@ function scheduleReminders(chatId) {
         12 * 60 * 60 * 1000,
     ];
     let index = 0;
+
     function sendNextReminder() {
         if (userData.get(chatId)?.received) return;
         sendInitialMessage(chatId);
@@ -82,20 +51,9 @@ function scheduleReminders(chatId) {
             userTimers[chatId] = setTimeout(sendNextReminder, delays[index]);
         }
     }
-    userTimers[chatId] = setTimeout(sendNextReminder, delays[index]);
-}
 
-async function checkUserSubscription(chatId) {
-    try {
-        const results = await Promise.all(
-            CHANNELS.map((channel) => bot.getChatMember(`@${channel}`, chatId))
-        );
-        return results.every((member) =>
-            ['member', 'administrator', 'creator'].includes(member.status)
-        );
-    } catch (error) {
-        console.error('Ошибка проверки подписки:', error);
-        return false;
+    if (!userTimers[chatId]) {
+        userTimers[chatId] = setTimeout(sendNextReminder, delays[index]);
     }
 }
 
@@ -103,115 +61,27 @@ bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const user = userData.get(chatId) || {};
 
-    if (query.data.startsWith('check_sub_')) {
-        const isSubscribed = await checkUserSubscription(chatId);
-        if (!isSubscribed) {
-            return bot.answerCallbackQuery(query.id, {
-                text: '❌ Ты не подписался на оба канала',
-                show_alert: true,
-            });
-        }
-        user.subscribed = true;
-        userData.set(chatId, user);
-        bot.answerCallbackQuery(query.id, {
-            text: '✅ Подписка подтверждена!',
-            show_alert: true,
-        });
-
-        // Разблокируем кнопку "📩 Получить", но оставляем кнопку "🔄 Проверить подписку"
-        bot.editMessageReplyMarkup(
-            {
-                inline_keyboard: [
-                    [
-                        {
-                            text: '✅ Подписаться на канал 1',
-                            url: `https://t.me/${CHANNELS[0]}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '✅ Подписаться на канал 2',
-                            url: `https://t.me/${CHANNELS[1]}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '🔄 Проверить подписку',
-                            callback_data: `check_sub_${chatId}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '📩 Получить',
-                            callback_data: `get_reward_${chatId}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '✔️ Готово',
-                            callback_data: `done_${chatId}`,
-                            disabled: true,
-                        },
-                    ],
-                ],
-            },
-            { chat_id: chatId, message_id: query.message.message_id }
-        );
-    }
-
     if (query.data.startsWith('get_reward_')) {
-        if (!user.subscribed) {
-            return bot.answerCallbackQuery(query.id, {
-                text: '❌ Сначала пройди проверку подписки',
-                show_alert: true,
-            });
-        }
         user.received = true;
         userData.set(chatId, user);
         bot.answerCallbackQuery(query.id);
 
-        // Разблокируем кнопку "✅ Готово"
-        bot.editMessageReplyMarkup(
-            {
-                inline_keyboard: [
-                    [
-                        {
-                            text: '✅ Подписаться на канал 1',
-                            url: `https://t.me/${CHANNELS[0]}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '✅ Подписаться на канал 2',
-                            url: `https://t.me/${CHANNELS[1]}`,
-                        },
-                    ],
-                    [
-                        {
-                            text: '🔄 Проверить подписку',
-                            callback_data: `check_sub_${chatId}`,
-                        },
-                    ],
-                    [{ text: '📩 Получить', url: REWARD_BOT }],
-                    [{ text: '✅ Готово', callback_data: `done_${chatId}` }],
-                ],
-            },
-            { chat_id: chatId, message_id: query.message.message_id }
-        );
-    }
-
-    if (query.data.startsWith('done_')) {
-        if (!user.received) {
-            return bot.answerCallbackQuery(query.id, {
-                text: '❌ Сначала нажми получить',
-                show_alert: true,
-            });
-        }
-        bot.answerCallbackQuery(query.id, { text: '✅ Завершено!' });
-
+        // Останавливаем напоминания
         if (userTimers[chatId]) {
             clearTimeout(userTimers[chatId]);
             delete userTimers[chatId];
         }
+
+        // Записываем в файл количество пользователей, которые нажали на кнопку
+        fs.appendFile(statsFile, `${chatId}\n`, (err) => {
+            if (err) console.error('Ошибка записи в файл:', err);
+        });
+
+        bot.editMessageReplyMarkup(
+            {
+                inline_keyboard: [[{ text: '✔️ Получить', url: REWARD_BOT }]],
+            },
+            { chat_id: chatId, message_id: query.message.message_id }
+        );
     }
 });
