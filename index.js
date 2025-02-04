@@ -5,8 +5,6 @@ const token = '7598049091:AAGxc5riFKv2LxwrbYYc2oA_-DB75sBEg8Q'; // Обновл�
 const bot = new TelegramBot(token, { polling: true });
 
 const REWARD_BOT = 'https://t.me/Stand2gold_special_for_all_bot?start=Welcome';
-const statsFile = 'stats.txt'; // Файл для хранения количества пользователей
-
 const userData = new Map();
 const userTimers = {}; // Таймеры пользователей
 
@@ -17,9 +15,11 @@ bot.setMyCommands([
 
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
-    userData.set(chatId, { received: false });
-    await sendInitialMessage(chatId);
-    scheduleReminders(chatId);
+    if (!userData.has(chatId)) {
+        userData.set(chatId, { received: false });
+        await sendInitialMessage(chatId);
+        scheduleReminders(chatId);
+    }
 });
 
 async function sendInitialMessage(chatId) {
@@ -34,27 +34,27 @@ async function sendInitialMessage(chatId) {
 }
 
 function scheduleReminders(chatId) {
-    const delays = [
-        2 * 60 * 1000,
-        5 * 60 * 1000,
-        30 * 60 * 1000,
-        60 * 60 * 1000,
-        12 * 60 * 60 * 1000,
-    ];
+    if (userTimers[chatId]) return; // Предотвращаем дублирование таймеров
+
+    const delays = [2, 5, 30, 60, 12 * 60]; // Минуты
     let index = 0;
 
     function sendNextReminder() {
         if (userData.get(chatId)?.received) return;
         sendInitialMessage(chatId);
-        if (index < delays.length - 1) {
-            index++;
-            userTimers[chatId] = setTimeout(sendNextReminder, delays[index]);
+        index++;
+        if (index < delays.length) {
+            userTimers[chatId] = setTimeout(
+                sendNextReminder,
+                delays[index] * 60 * 1000
+            );
         }
     }
 
-    if (!userTimers[chatId]) {
-        userTimers[chatId] = setTimeout(sendNextReminder, delays[index]);
-    }
+    userTimers[chatId] = setTimeout(
+        sendNextReminder,
+        delays[index] * 60 * 1000
+    );
 }
 
 bot.on('callback_query', async (query) => {
@@ -72,15 +72,11 @@ bot.on('callback_query', async (query) => {
             delete userTimers[chatId];
         }
 
-        // Записываем в файл количество пользователей, которые нажали на кнопку
-        fs.appendFile(statsFile, `${chatId}\n`, (err) => {
-            if (err) console.error('Ошибка записи в файл:', err);
-        });
+        // Записываем факт получения в файл
+        fs.appendFileSync('received_users.txt', `${chatId}\n`);
 
         bot.editMessageReplyMarkup(
-            {
-                inline_keyboard: [[{ text: '✔️ Получить', url: REWARD_BOT }]],
-            },
+            { inline_keyboard: [[{ text: '✔️ Получить', url: REWARD_BOT }]] },
             { chat_id: chatId, message_id: query.message.message_id }
         );
     }
